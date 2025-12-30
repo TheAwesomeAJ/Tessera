@@ -15,11 +15,11 @@ class PasswordManager:
         with open(path, 'rb') as f:
             self.key = f.read()
 
-    def create_password_file(self, path, inital_values=None):
+    def create_password_file(self, path, initial_values=None):
         self.password_file = path
         
-        if inital_values is not None:
-            for key, values in inital_values.items():
+        if initial_values is not None:
+            for key, values in initial_values.items():
                 self.add_password(key, values)
 
     def load_password_file(self, path):
@@ -68,10 +68,10 @@ def main():
             path = input ("What would you like to call this key? (Please use a lowercase name) ")
             pm.create_key(path)
         elif choice == "2":
-            path == input ("Enter path: ")
+            path = input ("Enter path: ")
             pm.load_key(path)
         elif choice == "3":
-            path == input ("What would you like to call this password file? (Please use a lowercase name) ")
+            path = input ("What would you like to call this password file? (Please use a lowercase name) ")
             pm.create_password_file(path, password)
         elif choice == "4":
             path = input ("Enter path: ")
