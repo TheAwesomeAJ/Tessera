@@ -1,6 +1,16 @@
 from cryptography.fernet import Fernet
 
-class PasswordManager:
+from rich.console import Console
+from rich.panel import Panel
+from rich.prompt import Prompt
+from rich.table import Table
+from rich.status import Status
+
+console = Console()
+
+# ------ Password Logic ------
+
+class Tessera:
     def __init__(self):
         self.key = None
         self.password_file = None
@@ -40,50 +50,75 @@ class PasswordManager:
  
     def get_password(self, site):
         return self.password_dict[site]
+
+# ------ Terminal UI Logic ------
+
+def cmd_create_key(path):
+    if not path:
+        path = Prompt.ask("What would you like to call this key? (Please use a lowercase name, and no spaces)")
+
+    Tessera().create_key(path)
+    console.print(f"\nThe encryption key [green]{path}[/green] was created successfully!\n")
+
+def cmd_load_key():
+    path = Prompt.ask("Please enter the path to the key file)")
+    Tessera().load_key(path)
+
+def cmd_create_pw_file():
+    path = Prompt.ask("What would you like to call this password file? (Please use a lowercase name, and no spaces)")
+    Tessera().create_password_file(path)
+
+def cmd_load_pw_file(path):
+    if not path:
+        path = Prompt.ask("Please enter the path to the password file")
+    console.print("[bold green]Password file was loaded successfully!\n[/bold green]")
+    Tessera().load_password_file(path)
+
+def cmd_add_password():
+    site = Prompt.ask("Please enter the website name for the password that you wish to add")
+    password = Prompt.ask("Please enter the password for the website that you entered")
+    Tessera().add_password(site, password)
+
+def cmd_fetch_password():
+    site = Prompt.ask("Please enter the website name for the password that you want to fetch")
+    console.print(f"[green]Password for {site} is {Tessera().get_password(site)}")
+
     
 def main():
-    password = {
-        "email": "1234567",
-        "facebook": "testing1",
-    }
 
-    pm = PasswordManager()
-
-    print("""What do you want to do?
-    (1) Create a new key
-    (2) Load an existing key
-    (3) Create a new password file
-    (4) Load an existing password file
-    (5) Add a new password
-    (6) Get a password
-    (q) Quit
-""")
+    console.clear()
+    console.print(
+        Panel(
+            "[bold cyan]Tessera[/bold cyan]\nTerminal Password Vault",
+            title="[bold magenta]Welcome[/bold magenta]",
+            subtitle="Type 'help' to see available commands",
+        )
+    )
     
     done = False
 
     while not done:
 
-        choice = input("Enter your choice: ")
-        if choice == "1":
-            path = input ("What would you like to call this key? (Please use a lowercase name) ")
-            pm.create_key(path)
-        elif choice == "2":
-            path = input ("Enter path: ")
-            pm.load_key(path)
-        elif choice == "3":
-            path = input ("What would you like to call this password file? (Please use a lowercase name) ")
-            pm.create_password_file(path, password)
-        elif choice == "4":
-            path = input ("Enter path: ")
-            pm.load_password_file(path)
-        elif choice == "5":
-            site = input("Enter the site: ")
-            password = input("Enter the password: ")
-            pm.add_password(site, password)
-        elif choice == "6":
-            site = input("What site do you want? ")
-            print(f"Password for {site} is {pm.get_password(site)} ")
-        elif choice == "q":
+        raw = Prompt.ask("tess >").strip()
+        if not raw:
+            continue
+
+        parts = raw.split()
+        command = parts[0].lower()
+        args = parts[1:] if len(parts) > 1 else []
+        if command == "create-key":
+            cmd_create_key(args[0] if args else None)
+        elif command == "load-key":
+            cmd_load_key()
+        elif command == "pass-file":
+            cmd_create_pw_file()
+        elif command == "load-pass-file":
+            cmd_load_pw_file(args[0] if args else None)
+        elif command == "add":
+            cmd_add_password()
+        elif command == "fetch":
+            cmd_fetch_password()
+        elif command == "q":
             done = True
             print("Goodbye! Thank you for using Tessera!")
         else:
