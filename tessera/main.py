@@ -10,6 +10,9 @@ import os
 import time
 import json
 
+import pyperclip
+import threading
+
 console = Console()
 
 BASE_DIR = os.path.join(os.path.expanduser("~"), ".tessera")
@@ -112,7 +115,7 @@ class Tessera:
 
         del self.password_dict[site]
         self.save_vault()
-        
+
         console.print(f"[green]Password for {site} deleted![/green]")
  
     def get_password(self, site):
@@ -161,8 +164,19 @@ def cmd_add_password():
         entry_type=entry_type
     )
 
-def cmd_fetch_password():
-    site = Prompt.ask("\nPlease enter the website name for the password that you want to fetch")
+def cmd_fetch_password(raw_cmd):
+    
+    parts = raw_cmd.split()
+    clip = "--clip" in parts
+
+    site = None
+    for part in parts [1:]:
+        if not part.startswith("--"):
+            site = part
+            break
+
+    if not site:
+        site = Prompt.ask("\nPlease enter the website name for the password that you want to fetch")
     entry = manager.get_password(site)
 
     if not entry:
@@ -170,6 +184,22 @@ def cmd_fetch_password():
         console.print(f"[red]No entry was found for {site}[/red]")
         console.print("\n")
 
+    secret = entry.get("secret")
+
+    if clip:
+        pyperclip.copy(secret)
+
+        def clear_clipboard():
+            time.sleep(10)
+            pyperclip.copy("")
+
+        threading.Thread(target=clear_clipboard, daemon=True).start()
+
+        console.print(
+            f"[green]Secret for {site} copied to clipboard (clears in 10s)[/green]\n"
+        )
+        return
+    
     table = Table(
         title=f"Entry for {site}",
         show_lines=True,
@@ -300,8 +330,8 @@ def main():
             cmd_add_password()
         elif cmd == "delete":
             cmd_delete_password()
-        elif cmd == "fetch":
-            cmd_fetch_password()
+        elif cmd.startswith("fetch"):
+            cmd_fetch_password(cmd)
         elif cmd == "list":
             cmd_list_passwords()
         elif cmd == "search":
