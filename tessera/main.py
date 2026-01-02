@@ -1,4 +1,4 @@
-from cryptography.fernet import Fernet, InvalidToken
+from cryptography.fernet import Fernet
 
 from rich.console import Console
 from rich.panel import Panel
@@ -8,6 +8,7 @@ from rich import box
 
 import os
 import time
+import json
 
 console = Console()
 
@@ -52,10 +53,10 @@ class Tessera:
 
     def create_password_file(self):
         timestamp = int(time.time())
-        path = os.path.join(DATA_DIR, f"tessera_pw_{timestamp}.txt")
+        path = os.path.join(DATA_DIR, f"tessera_pw_{timestamp}.json")
         self.password_file = path
-        with open(path, 'w'):
-            pass
+        with open(path, 'w') as f:
+            json.dump({},f)
         console.print(f"[green]Password file created:[/green] {path}\n")
         return path
 
@@ -63,26 +64,46 @@ class Tessera:
         if not os.path.exists(path):
             console.print(f"[red]Password file {path} not found[/red]\n")
             return False
+
         self.password_file = path
+        self.password_dict.clear()
+
         with open(path, 'r') as f:
-            for line in f:
-                if ":" in line:
-                    site, encrypted = line.strip().split(":", 1)
-                    try:
-                        self.password_dict[site] = self.fernet.decrypt(encrypted.encode()).decode()
-                    except InvalidToken:
-                        console.print(f"[red]Failed to decrypt password for site: {site}[/red]")
+            vault_data = json.load(f)
+
+        for site, encrypted in vault_data.items():
+            decrypted = self.fernet.decrypt(encrypted.encode()).decode()
+            entry = json.loads(decrypted)
+            self.password_dict[site] = entry
+
         console.print(f"[green]Password file loaded:[/green] {path}\n")
         return True
 
-    def add_password(self, site, password):
-        self.password_dict[site] = password
+    def save_vault(self):
+        if not self.password_file:
+            return
+        encrypted_vault = {}
 
-        if self.password_file is not None:
-            encrypted = Fernet(self.key).encrypt(password.encode())
-            with open(self.password_file, 'a+') as f:
-                f.write(f"{site}:{encrypted.decode()}\n")
-        console.print(f"[green]Password for {site} added![/green]")
+        for site, entry in self.password_dict.items():
+            encrypted = self.fernet.encrypt(json.dumps(entry).encode())
+            encrypted_vault[site] = encrypted.decode()
+
+        with open(self.password_file, "w") as f:
+            json.dump(encrypted_vault, f, indent=2)
+
+    def add_password(self, site, password, username=None, email=None, entry_type="password"):
+        entry = {
+            "site": site,
+            "username": username,
+            "email": email,
+            "type": entry_type,
+            "secret": password
+        }
+
+        self.password_dict[site] = entry
+        self.save_vault()
+
+        console.print(f"[green]Entry for {site} added![/green]")
 
     def delete_password(self, site):
         if site in self.password_dict:
@@ -115,18 +136,46 @@ def cmd_create_pw_file():
 
 def cmd_add_password():
     site = Prompt.ask("\nPlease enter the website name for the password that you wish to add")
-    password = Prompt.ask("Please enter the password for the website that you entered")
-    manager.add_password(site, password)
+    password = Prompt.ask("Please enter the password for the website that you entered", password=True)
+    username = Prompt.ask("Please enter the username for this website")
+    email = Prompt.ask("Please enter the email associated with this account")
+    entry_choice = Prompt.ask("Is this (1) an API key, or (2) a password? (Enter the corresponding number)", choices=["1", "2"])
+
+    entry_type = "api_key" if entry_choice == "1" else "password"
+
+    manager.add_password(
+        site=site,
+        password=password,
+        username=username or None,
+        email=email or None,
+        entry_type=entry_type
+    )
 
 def cmd_fetch_password():
     site = Prompt.ask("\nPlease enter the website name for the password that you want to fetch")
-    pw = manager.get_password(site)
-    if pw:
+    entry = manager.get_password(site)
+
+    if not entry:
         console.print("\n")
-        console.print(Panel(f"[bold green]Password for {site} is {pw}", title_align="left", expand=False, title="Info"))
+        console.print(f"[red]No entry was found for {site}[/red]")
         console.print("\n")
-    else:
-        console.print(f"[red]No password was found for {site}[/red]\n")
+
+    table = Table(
+        title=f"Entry for {site}",
+        show_lines=True,
+        box=box.HORIZONTALS
+    )
+
+    table.add_column("Field", style="bold cyan3")
+    table.add_column("Value")
+
+    for key, value in entry.items():
+        if value is not None:
+            table.add_row(key.capitalize(), value)
+
+    console.print("\n")
+    console.print(table)
+    console.print("\n")
 
 def cmd_delete_password():
     site = Prompt.ask("\nPlease enter the website name for the password that you wish to delete")
@@ -174,7 +223,7 @@ def main():
 
     pw_files = sorted(
         f for f in os.listdir(DATA_DIR)
-        if f.startswith("tessera_pw_") and f.endswith(".txt")
+        if f.startswith("tessera_pw_") and f.endswith(".json")
     )
 
     if key_files:
