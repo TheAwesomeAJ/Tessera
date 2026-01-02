@@ -106,23 +106,33 @@ class Tessera:
         console.print(f"[green]Entry for {site} added![/green]")
 
     def delete_password(self, site):
-        if site in self.password_dict:
-            del self.password_dict[site]
-        else:
+        if site not in self.password_dict:
             console.print(f"[red]No password found for {site}[/red]")
             return
 
-        if self.password_file is not None:
-            with open(self.password_file, "r") as f:
-                lines = f.readlines()
-            with open(self.password_file, "w") as f:
-                for line in lines:
-                    if not line.startswith(site + ":"):
-                        f.write(line)
+        del self.password_dict[site]
+        self.save_vault()
+        
         console.print(f"[green]Password for {site} deleted![/green]")
  
     def get_password(self, site):
         return self.password_dict.get(site, None)
+
+    def get_all_entries(self):
+        return self.password_dict
+
+    def search_entries(self, query):
+        query = query.lower()
+        results = {}
+
+        for site, entry in self.password_dict.items():
+            if (
+                query in site.lower()
+                or (entry.get("username") and query in entry["username"].lower())
+                or (entry.get("email") and query in entry["email"].lower())
+            ):
+                results[site] = query
+        return results
 
 # ------ Terminal UI Logic ------
 
@@ -194,12 +204,53 @@ def cmd_help():
     table.add_row("add", "Add a new password")
     table.add_row("delete", "Delete a password")
     table.add_row("fetch", "Fetch a password")
+    table.add_row("list", "Show all stored entries")
+    table.add_row("search", "Search entries by site, username, or email")
     table.add_row("quit", "Close Tessera")
     table.add_row("help", "Shows this help message again")
 
     console.print("\n")
     console.print(table)
     console.print("\n")
+
+def display_entries(entries, title="Entries"):
+    if not entries:
+        console.print("[red]No entries found[/red]\n")
+        return
+
+    table = Table(
+        title=title,
+        show_lines=True,
+        box=box.HORIZONTALS
+    )
+
+    table.add_column("Site,", style="bold cyan3")
+    table.add_column("Type")
+    table.add_column("Username")
+    table.add_column("Email")
+
+    for site, entry in entries.items():
+        table.add_row(
+            site,
+            entry.get("type", ""),
+            entry.get("username") or "",
+            entry.get("email") or ""
+        )
+
+    console.print("\n")
+    console.print(table)
+    console.print("\n")
+
+def cmd_list_passwords():
+    entries = manager.get_all_entries()
+    display_entries(entries, title="All Stored Entries")
+
+def cmd_search_passwords():
+    query = Prompt.ask("\nSearch for (site, username, or email")
+    results = manager.search_entries(query)
+    display_entries(results, title="Search Results for '{query}'")
+
+# ------ Main UI Logic ------
 
 def main():
     console.clear()
@@ -251,6 +302,10 @@ def main():
             cmd_delete_password()
         elif cmd == "fetch":
             cmd_fetch_password()
+        elif cmd == "list":
+            cmd_list_passwords()
+        elif cmd == "search":
+            cmd_search_passwords()
         elif cmd == "quit":
             done = True
             print("Goodbye! Thank you for using Tessera!")
