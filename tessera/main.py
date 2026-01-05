@@ -199,7 +199,7 @@ def cmd_fetch_password(raw_cmd):
             f"[green]Secret for {site} copied to clipboard (clears in 10s)[/green]\n"
         )
         return
-    
+
     table = Table(
         title=f"Entry for {site}",
         show_lines=True,
