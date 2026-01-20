@@ -17,6 +17,8 @@ import json
 import pyperclip
 import threading
 
+import pyotp
+
 console = Console()
 
 BASE_DIR = os.path.join(os.path.expanduser("~"), ".tessera")
@@ -98,13 +100,14 @@ class Tessera:
         with open(self.password_file, "w") as f:
             json.dump(encrypted_vault, f, indent=2)
 
-    def add_password(self, site, password, username=None, email=None, entry_type="password"):
+    def add_password(self, site, password, username=None, email=None, entry_type="password", totp_secret=None):
         entry = {
             "site": site,
             "username": username,
             "email": email,
             "type": entry_type,
-            "secret": password
+            "secret": password,
+            "totp_secret": totp_secret  # new field
         }
 
         self.password_dict[site] = entry
@@ -160,12 +163,15 @@ def cmd_add_password():
 
     entry_type = "api_key" if entry_choice == "1" else "password"
 
+    totp_secret = Prompt.ask("Enter TOTP secret (leave blank if none)", default="").strip() or None
+
     manager.add_password(
         site=site,
         password=password,
         username=username or None,
         email=email or None,
-        entry_type=entry_type
+        entry_type=entry_type,
+        totp_secret=totp_secret
     )
 
 def cmd_fetch_password(raw_cmd):
@@ -221,6 +227,27 @@ def cmd_fetch_password(raw_cmd):
     console.print(table)
     console.print("\n")
 
+def cmd_fetch_totp():
+    site = Prompt.ask("\nEnter the website name for the TOTP code")
+    entry = manager.get_password(site)
+
+    if not entry or not entry.get("totp_secret"):
+        console.print(f"[red]No TOTP secret found for {site}[/red]\n")
+        return
+
+    totp = pyotp.TOTP(entry["totp_secret"])
+    code = totp.now()
+
+    pyperclip.copy(code)
+    console.print(f"[green]TOTP for {site}: {code} (copied to clipboard for 30s)[/green]")
+
+    def clear_clipboard():
+        time.sleep(30)
+        pyperclip.copy("")
+
+    threading.Thread(target=clear_clipboard, daemon=True).start()
+
+
 def cmd_delete_password():
     site = Prompt.ask("\nPlease enter the website name for the password that you wish to delete")
     manager.delete_password(site)
@@ -236,6 +263,7 @@ def cmd_help():
     table.add_row("generate", "Generate a new encryption key")
     table.add_row("new", "Create a new password file")
     table.add_row("add", "Add a new password")
+    table.add_row("totp", "Generate a TOTP code for a stored account.")
     table.add_row("delete", "Delete a password")
     table.add_row("fetch", "Fetch a password")
     table.add_row("list", "Show all stored entries")
@@ -345,6 +373,8 @@ def main():
             print("Goodbye! Thank you for using Tessera!")
         elif cmd == "help":
             cmd_help()
+        elif cmd == "totp":
+            cmd_fetch_totp()
         else:
             print("Hmm. Looks like that option doesn't exist. Please try again!")
 
