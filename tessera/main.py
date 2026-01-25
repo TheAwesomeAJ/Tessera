@@ -128,6 +128,23 @@ class Tessera:
     def get_password(self, site):
         return self.password_dict.get(site, None)
 
+    def edit_password(self, site, **updates):
+        if site not in self.password_dict:
+            console.print(f"[red]No entry found for {site}[/red]")
+            return False
+
+        entry = self.password_dict[site]
+
+        for key, value in updates.items():
+            if value is not None:
+                entry[key] = value
+
+        self.password_dict[site] = entry
+        self.save_vault()
+
+        console.print(f"[green]Entry for {site} updated![/green]")
+        return True
+
     def get_all_entries(self):
         return self.password_dict
 
@@ -173,6 +190,55 @@ def cmd_add_password():
         entry_type=entry_type,
         totp_secret=totp_secret
     )
+
+def cmd_edit_password():
+    site = Prompt.ask("\nEnter the website name you want to edit")
+    entry = manager.get_password(site)
+
+    if not entry:
+        console.print(f"[red]No entry found for {site}[/red]")
+        return
+
+    console.print("[cyan]Press Enter to keep the current value[/cyan]\n")
+
+    password = Prompt.ask(
+        f"Password",
+        password=True,
+    )
+
+    username = Prompt.ask(
+        "Username",
+    )
+
+    email = Prompt.ask(
+        "Email",
+    )
+
+    entry_choice = Prompt.ask(
+        "Type (1= API key, 2 = password)",
+        choices=["1", "2"],
+        default="1" if entry.get("type") == "api_key" else "2"
+    )
+
+    totp_secret = Prompt.ask(
+        "Enter the TOTP secret",
+        default=entry.get("totp_secret") or ""
+    ).stripe() or None
+
+    updates ={}
+
+    if password:
+        updates["secret"] = password
+    if username:
+        updates["username"] = username
+    if email:
+        updates["email"] = email
+    if totp_secret:
+        updates["totp_secret"] = totp_secret
+
+    updates["type"] = "api_key" if entry_choice == "1" else "password"
+
+    manager.edit_password(site, **updates)
 
 def cmd_fetch_password(raw_cmd):
     
@@ -263,6 +329,7 @@ def cmd_help():
     table.add_row("generate", "Generate a new encryption key")
     table.add_row("new", "Create a new password file")
     table.add_row("add", "Add a new password")
+    table.add_row("edit","Edit an existing entry")
     table.add_row("totp", "Generate a TOTP code for a stored account.")
     table.add_row("delete", "Delete a password")
     table.add_row("fetch", "Fetch a password")
@@ -364,6 +431,8 @@ def main():
             cmd_delete_password()
         elif cmd.startswith("fetch"):
             cmd_fetch_password(cmd)
+        elif cmd == "edit":
+            cmd_edit_password()
         elif cmd == "list":
             cmd_list_passwords()
         elif cmd == "search":
