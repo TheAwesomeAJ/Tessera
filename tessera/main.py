@@ -18,12 +18,20 @@ import pyperclip
 import threading
 
 import pyotp
+import secrets
+import string
+
 
 console = Console()
+
+LETTERS = string.ascii_letters
+NUMBERS = string.digits
+SYMBOLS = "!@#$%^&*()-_=+[]{};:,.<>?"
 
 BASE_DIR = os.path.join(os.path.expanduser("~"), ".tessera")
 KEY_DIR = os.path.join(BASE_DIR, "Keys")
 DATA_DIR = os.path.join(BASE_DIR, "Data")
+
 
 os.makedirs(KEY_DIR, exist_ok=True)
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -191,6 +199,56 @@ def cmd_add_password():
         totp_secret=totp_secret
     )
 
+def cmd_generate_password(raw_cmd):
+    parts = raw_cmd.split()
+
+    use_letters = "--a" in parts
+    use_numbers = "--1" in parts
+    use_symbols = "--1" in parts
+    use_clip = "--clip" in parts
+
+    length = 16
+
+    if "--length" in parts:
+        try:
+            idx = parts.index("--index")
+            length = int(parts[idx + 1])
+        except (IndexError, ValueError):
+            console.print("\n[red]Invalid length provided. Using default (16).[/red]")
+
+    if not (use_letters or use_numbers or use_symbols):
+        use_letters = True
+        use_numbers = True
+    
+    pool = ""
+
+    if use_letters:
+        pool += LETTERS
+    if use_numbers:
+        pool += NUMBERS
+    if use_symbols:
+        pool += SYMBOLS
+
+    if not pool:
+        console.print("[red]No character sets selected. Cannot generate password. Please try again[/red]")
+        return
+    
+    password = "".join(secrets.choice(pool) for _ in range(length))
+
+    if use_clip:
+        pyperclip.copy(password)
+
+        def clear_clipboard():
+            time.sleep(60)
+            pyperclip.copy("")
+
+        threading.Thread(target=clear_clipboard, daemon=True).start()
+
+        console.print(f"[green]Generate password ({length} chars) copied to clipboard. (clears in 60s)[/green]\n")
+    else:
+        console.print("\n[bold cyan3]Generated Password[/bold cyan3]")
+        console.print(password + "\n")
+
 def cmd_edit_password():
     site = Prompt.ask("\nEnter the website name you want to edit")
     entry = manager.get_password(site)
@@ -223,7 +281,7 @@ def cmd_edit_password():
     totp_secret = Prompt.ask(
         "Enter the TOTP secret",
         default=entry.get("totp_secret") or ""
-    ).stripe() or None
+    ).strip() or None
 
     updates ={}
 
@@ -330,6 +388,7 @@ def cmd_help():
     table.add_row("new", "Create a new password file")
     table.add_row("add", "Add a new password")
     table.add_row("edit","Edit an existing entry")
+    table.add_row("gen / generate", "Generate a password: --a --1 --symbol --length N [--clip]")
     table.add_row("totp", "Generate a TOTP code for a stored account.")
     table.add_row("delete", "Delete a password")
     table.add_row("fetch", "Fetch a password")
@@ -421,8 +480,8 @@ def main():
     while not done:
 
         cmd = Prompt.ask("[bold cyan3]tessera >[/bold cyan3]").strip().lower()
-        if cmd == "generate":
-            cmd_generate_key()
+        if cmd.startswith("gen") or cmd.startswith("generate"):
+            cmd_generate_password(cmd)
         elif cmd == "new":
             cmd_create_pw_file()
         elif cmd == "add":
